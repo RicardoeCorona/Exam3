@@ -1,0 +1,191 @@
+---
+title: "Exam 3"
+author: "Ricardo Corona"
+date: "7/9/2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#clearing the environment
+#rm(list=ls(all=TRUE))
+
+#loading tidycensus
+library(tidycensus)
+
+#loading the API Key
+census_api_key("0426b3f1f3fcd947dc8359b771cb0392e2429626")
+
+#loading the American Community Survey for 2010 and 2015
+v15 = load_variables(year = 2015,
+                     dataset = "acs5")
+v10 = load_variables(year = 2010,
+                     dataset = "acs5")
+
+#obtaining gini indexes for 2010 and 2015
+#2015 gini index
+gini_data15 = get_acs(geography = "state",
+                variables = c(gini_score2015 = c("B19083_001")),
+                year = 2015)
+
+#2010 gini index
+gini_data10 = get_acs(geography = "state",
+                variables = c(gini_score2010 = c("B19083_001")),
+                year = 2010)
+
+#appending gini data into inequality dataset
+library(tidyverse)
+inequality_panel = bind_rows(gini_data15, gini_data10)
+inequality_panel$year = ifelse(inequality_panel$variable == 
+                                 "gini_score2015","2015","2010")
+#renaming variable names in inequality_panel
+library(data.table)
+setnames(inequality_panel, "NAME","state")
+setnames(inequality_panel, "estimate","gini")
+
+#running head on inequality panel to view data
+head(inequality_panel)
+
+#reshaping inequality data in wide format
+inequality_wide=
+  inequality_panel %>% 
+  pivot_wider(id_cols = c("state","GEOID","year"),
+              names_from = "year",
+              values_from = "gini",
+              names_prefix = "year_")
+
+#head of inequality_wide
+head(inequality_wide)
+
+#reshaping inequality_wide to long format
+inequality_long =
+  inequality_wide %>% 
+  pivot_longer(cols = starts_with("year"),
+               names_to = "year",
+               names_prefix = "year_",
+               values_to = "gini",
+               values_drop_na = FALSE) %>% 
+  filter(!(gini == 0))
+
+#head of inequality_long
+head(inequality_long)
+
+#comparing observations of inequality_long and inequality_panel
+str(inequality_panel)
+str(inequality_long)
+
+#collpasing the inequality_long data
+inequality_collapsed=
+  inequality_panel %>% 
+  group_by(state,gini,GEOID, year) %>% 
+  summarize(across(where(is.numeric),mean)) 
+
+#producing map of US with gini scores
+library(rnaturalearth)
+library(viridis)
+#obatining just US
+#US = ne_countries(state = 'united_states',
+             #scale = "medium",
+             #returnclass = "sf")
+
+#plotting map
+#library(ggplot2)
+#US_map = ggplot() +
+  #geom_sf(data = US )+
+  #geom_sf(data = inequality_collapsed, aes(fill = gini))+
+  #scale_fill_viridis(option = "viridis")
+
+#print(US_map)
+
+#using WDI package to load in GDP data
+library(WDI)
+deflator_data = WDI(country = "all",
+                    indicator = "NY.GDP.MKTP.CD",
+                    start = 2006, end = 2017,
+                    extra = FALSE, cache = NULL)
+
+#renaming GDP variable to gdp_cuuren
+setnames(deflator_data, "NY.GDP.MKTP.CD", "gdp_current")
+
+#subset to get a data frame only for US dollars
+usd_deflator = subset(deflator_data, country == "United States")
+
+#subset(usd_deflator, deflator==100)
+
+#deflated_data = left_join(x = inequality_collapsed,
+                          #y = usd_deflator,
+                         # by = "year")
+#deflating data
+#deflated_data$deflated_amount = deflated_data$gdp_amount/
+                                #(deflated_data$deflator)/100
+
+#head(deflated_data)
+```
+
+The main three components of a shiny app are the User Interface, which includes inputs and outputs, the server, in which you must store, render, and refer the outputs, and then the app exectuion in which you must specify the user Interface and the server.
+
+```{r}
+library(pdftools)
+library(tidyr)
+library(tidytext)
+library(dplyr)
+library(stringr)
+
+#pulling pdf text from online
+online_text=pdf_text(pdf = "https://pdf.usaid.gov/pdf_docs/PA00TNMG.pdf")
+
+#converting text to data frame
+armeniatext=as.data.frame(online_text, stringAsFactors = FALSE)
+
+#tokenizing the data and removing stop words
+data(stop_words)
+#armeniatext = armeniatext %>% 
+  #unnest_tokens(word, text) %>% 
+  #anti_join(stop_words)
+
+#looking for the top 5 most used words
+#armeniatext %>% 
+  #count(word, sort = TRUE)
+
+#loading the hot100 bilboards page
+hot100page = "https://www.billboard.com/charts/hot-100"
+hot100exam = read_html(hot100page)
+
+#using rvest fucntion to idntify all nodes
+library(rvest)
+
+body_nodes <-hot100exam%>%
+  html_node("body")%>%
+  html_children()
+
+body_nodes
+
+#pulling rank , artist, title ,and last week data
+rank = hot100exam %>% 
+  rvest::html_nodes('body') %>% 
+  xml2::xml_find_all("//span[contains(@class,
+                     'chart-element__rank__number')]") %>% 
+  rvest::html_text()
+
+artist = hot100exam %>% 
+  rvest::html_nodes("body") %>% 
+  xml2::xml_find_all("//span[contains(@class,
+                     'chart-element__information__artist')]") %>% 
+  rvest::html_text()
+
+title = hot100exam %>% 
+  rvest::html_nodes("body") %>% 
+  xml2::xml_find_all("//span[contains(@class,
+                     'chart-element__information__song')]") %>% 
+  rvest::html_text()
+
+last_week = hot100exam %>% 
+  rvest::html_nodes("body") %>% 
+  xml2::xml_find_all("//span[contains(@class,
+                     'chart-element__information__delta__text')]") %>% 
+  rvest::html_text()
+```
+
